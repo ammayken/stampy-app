@@ -59,18 +59,20 @@ assert.deepEqual(lib.logbooks.map((b) => b.id), ['first']);
 assert.equal(lib.currentId, 'first');
 assert.equal(canRemoveLogbook(lib, 'first'), false);
 
-import { COVER_COLORS, moveStamp, recolorLogbook } from './library.ts';
+import { COVER_COLOR_NAMES, COVER_COLORS, moveStamp, setCoverColor, setCoverPhoto } from './library.ts';
 
 // Moving a stamp changes only its logbook; an unknown logbook is ignored.
 lib = addLogbook(lib, 'c', 'Food');
 assert.equal(moveStamp(lib, '1', 'nowhere'), lib);
 lib = moveStamp(lib, '1', 'c');
 assert.deepEqual([stampsIn(lib, 'first').length, stampsIn(lib, 'c').length], [0, 1]);
-// Recolouring steps through the colours and wraps back to the first.
-let recolored = lib;
-for (const _ of COVER_COLORS) recolored = recolorLogbook(recolored, 'first');
-assert.equal(recolorLogbook(lib, 'first').logbooks[0].color, COVER_COLORS[1]);
-assert.equal(recolored.logbooks[0].color, COVER_COLORS[0]);
+// A cover photo sits on top of the colour; choosing a colour drops the photo.
+assert.equal(COVER_COLOR_NAMES.length, COVER_COLORS.length);
+const withPhoto = setCoverPhoto(lib, 'first', 'cover-1.jpg');
+assert.equal(withPhoto.logbooks[0].cover, 'cover-1.jpg');
+const recolored = setCoverColor(withPhoto, 'first', COVER_COLORS[2]);
+assert.deepEqual([recolored.logbooks[0].color, recolored.logbooks[0].cover], [COVER_COLORS[2], undefined]);
+assert.equal(recolored.logbooks[1].color, withPhoto.logbooks[1].color);
 
 import { PAPER_COLORS, paperOf, setPaper } from './library.ts';
 

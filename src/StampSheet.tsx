@@ -52,7 +52,7 @@ export function StampSheet({
     if (!stamp) return;
     ActionSheetIOS.showActionSheetWithOptions(
       {
-        title: 'Move to Logbook',
+        title: 'Move to Album',
         options: [...otherLogbooks.map((b) => b.name), 'Cancel'],
         cancelButtonIndex: otherLogbooks.length,
       },
@@ -102,7 +102,7 @@ export function StampSheet({
               {otherLogbooks.length > 0 ? (
                 <>
                   <View style={styles.separator} />
-                  <Row icon="book-outline" label="Move to Logbook" onPress={move} />
+                  <Row icon="book-outline" label="Move to Album" onPress={move} />
                 </>
               ) : null}
             </View>

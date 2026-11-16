@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
 import { FlatList, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -51,6 +52,7 @@ export function Logbook({
 
   return (
     <View style={[styles.screen, { backgroundColor: paper, paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
+      <StatusBar style={ink === '#2a2622' ? 'dark' : 'light'} />
       {/* Paper grain: a see-through tile repeated over whatever colour the page is. */}
       <Image source={require('../assets/paper.png')} resizeMode="repeat" style={styles.texture} />
 
@@ -60,10 +62,10 @@ export function Logbook({
           onPress={onShelf}
           hitSlop={12}
           accessibilityRole="button"
-          accessibilityLabel="All logbooks"
+          accessibilityLabel="All albums"
         >
           <Ionicons name="chevron-back" size={24} color={ink} />
-          <Text style={[styles.backText, { color: ink }]}>Logbooks</Text>
+          <Text style={[styles.backText, { color: ink }]}>Albums</Text>
         </Pressable>
         <View style={styles.actions}>
           <Pressable

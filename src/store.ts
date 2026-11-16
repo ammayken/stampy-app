@@ -6,8 +6,13 @@ import { toLibrary, type Library, type StampRecord } from './library';
 const dir = new Directory(Paths.document, 'stamps');
 const index = new File(dir, 'stamps.json');
 
+/** Full location of a stored photo (a stamp or an album cover) from its file name. */
+export function fileUri(fileName: string): string {
+  return new File(dir, fileName).uri;
+}
+
 export function stampUri(stamp: StampRecord): string {
-  return new File(dir, stamp.file).uri;
+  return fileUri(stamp.file);
 }
 
 /** Throws if the index is unreadable; the caller must then not save, so a bad file is never overwritten. */
@@ -27,7 +32,7 @@ export function storePhoto(tempUri: string, fileName: string) {
   new File(tempUri).moveSync(new File(dir, fileName));
 }
 
-export function deletePhoto(stamp: StampRecord) {
-  const file = new File(dir, stamp.file);
+export function deletePhoto(fileName: string) {
+  const file = new File(dir, fileName);
   if (file.exists) file.delete();
 }

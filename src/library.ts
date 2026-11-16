@@ -5,6 +5,7 @@ export type Logbook = {
   id: string;
   name: string;
   color: string; // cloth cover
+  cover?: string; // file name of a cover photo in the stamps folder; shown instead of the plain cloth
   paper?: string; // inside pages; missing in logbooks saved before pages had a colour
 };
 
@@ -36,11 +37,12 @@ export type Library = {
 
 /** Dark cloth colours, so cream stamps and labels stay readable on all of them. */
 export const COVER_COLORS = ['#26352e', '#232f45', '#4a2530', '#40332a', '#3a2d4a', '#2d2d30'];
+export const COVER_COLOR_NAMES = ['Forest', 'Navy', 'Burgundy', 'Walnut', 'Plum', 'Charcoal'];
 
 /** Turns whatever was read from disk into a Library. The first app version saved a bare list of stamps. */
 export function toLibrary(saved: unknown): Library {
   if (Array.isArray(saved)) {
-    const book: Logbook = { id: 'first', name: 'My Logbook', color: COVER_COLORS[0] };
+    const book: Logbook = { id: 'first', name: 'My Album', color: COVER_COLORS[0] };
     return {
       logbooks: [book],
       currentId: book.id,
@@ -75,10 +77,14 @@ export function moveStamp(lib: Library, id: string, logbookId: string): Library 
   return { ...lib, stamps: lib.stamps.map((s) => (s.id === id ? { ...s, logbookId } : s)) };
 }
 
-/** Gives a logbook the next cover colour in the list, wrapping around. */
-export function recolorLogbook(lib: Library, id: string): Library {
-  const next = (color: string) => COVER_COLORS[(COVER_COLORS.indexOf(color) + 1) % COVER_COLORS.length];
-  return { ...lib, logbooks: lib.logbooks.map((b) => (b.id === id ? { ...b, color: next(b.color) } : b)) };
+/** Gives a logbook a plain cloth cover of this colour, dropping any cover photo. */
+export function setCoverColor(lib: Library, id: string, color: string): Library {
+  return { ...lib, logbooks: lib.logbooks.map((b) => (b.id === id ? { ...b, color, cover: undefined } : b)) };
+}
+
+/** Gives a logbook a cover photo (a file name in the stamps folder). */
+export function setCoverPhoto(lib: Library, id: string, cover: string): Library {
+  return { ...lib, logbooks: lib.logbooks.map((b) => (b.id === id ? { ...b, cover } : b)) };
 }
 
 export function removeStamp(lib: Library, id: string): Library {

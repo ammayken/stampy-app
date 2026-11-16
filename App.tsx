@@ -2,9 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import * as ImagePicker from 'expo-image-picker';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Animated, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { centerCrop, STAMP_ASPECT, STAMP_PX } from './src/crop';
 import { Fields } from './src/Fields';
@@ -14,7 +15,8 @@ import {
   currentLogbook,
   editStamp,
   moveStamp,
-  recolorLogbook,
+  setCoverColor,
+  setCoverPhoto,
   removeLogbook,
   removeStamp,
   renameLogbook,
@@ -146,6 +148,23 @@ function Main({ saved }: { saved: Library }) {
     }
   }
 
+  /** Picks a photo from the phone's gallery and makes it the album's cover. */
+  async function chooseCoverPhoto(id: string) {
+    try {
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      if (picked.canceled) return;
+      // Covers are shown small, so keep a 900 px wide copy rather than the full photo.
+      const image = await ImageManipulator.manipulate(picked.assets[0].uri).resize({ width: 900 }).renderAsync();
+      const copy = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.85 });
+      const fileName = `cover-${id}-${Date.now()}.jpg`;
+      storePhoto(copy.uri, fileName);
+      const old = library.logbooks.find((b) => b.id === id)?.cover;
+      if (commit(setCoverPhoto(library, id, fileName)) && old) deletePhoto(old);
+    } catch (e) {
+      Alert.alert('Could not set the cover photo', message(e));
+    }
+  }
+
   const book = currentLogbook(library);
   const bookStamps = stampsIn(library, book.id);
 
@@ -158,8 +177,16 @@ function Main({ saved }: { saved: Library }) {
         }}
         onCreate={(name) => commit(addLogbook(library, String(Date.now()), name))}
         onRename={(id, name) => commit(renameLogbook(library, id, name))}
-        onRecolor={(id) => commit(recolorLogbook(library, id))}
-        onRemove={(id) => commit(removeLogbook(library, id))}
+        onCoverColor={(id, color) => {
+          const old = library.logbooks.find((b) => b.id === id)?.cover;
+          if (commit(setCoverColor(library, id, color)) && old) deletePhoto(old);
+        }}
+        onCoverPhoto={chooseCoverPhoto}
+        onRemove={(id) => {
+          const old = library.logbooks.find((b) => b.id === id)?.cover;
+          const next = removeLogbook(library, id);
+          if (next !== library && commit(next) && old) deletePhoto(old);
+        }}
       />
     );
   }
@@ -178,7 +205,7 @@ function Main({ saved }: { saved: Library }) {
         onMove={(stamp, logbookId) => commit(moveStamp(library, stamp.id, logbookId))}
         onDelete={(stamp) => {
           // Forget the stamp first; only then remove its photo, so a failure never leaves a stamp without a photo.
-          if (commit(removeStamp(library, stamp.id))) deletePhoto(stamp);
+          if (commit(removeStamp(library, stamp.id))) deletePhoto(stamp.file);
         }}
       />
     );
