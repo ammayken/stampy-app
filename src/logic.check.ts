@@ -31,3 +31,31 @@ for (const [w, h] of [[350, 600], [335, 480], [390, 640], [0, 0]]) {
   assert.ok(s === 0 || (s * 3 + 24 <= w && s * 1.306 * 4 + 36 <= h), `${w}x${h}`);
 }
 console.log('fitStamp ok');
+
+import { addLogbook, addStamp, canRemoveLogbook, removeLogbook, removeStamp, stampsIn, toLibrary } from './library.ts';
+
+// Stamps saved by the first app version (a bare list) land in a default logbook.
+let lib = toLibrary([{ id: '1', file: '1.jpg', takenAt: '2026-11-16T00:00:00.000Z', note: 'hi' }]);
+assert.equal(lib.logbooks.length, 1);
+assert.equal(lib.stamps[0].logbookId, lib.currentId);
+assert.equal(lib.stamps[0].note, 'hi');
+// A library saved in the current shape is passed through untouched.
+assert.deepEqual(toLibrary(JSON.parse(JSON.stringify(lib))), lib);
+// A fresh install starts with one empty logbook.
+assert.equal(toLibrary([]).logbooks.length, 1);
+
+// A new logbook becomes current and receives new stamps; blank names are ignored.
+assert.equal(addLogbook(lib, 'b', '  '), lib);
+lib = addLogbook(lib, 'b', ' Trips ');
+assert.equal(lib.currentId, 'b');
+lib = addStamp(lib, '2', '2.jpg', '2026-11-16T00:00:00.000Z', ' Lisbon ', '');
+assert.deepEqual(stampsIn(lib, 'b').map((s) => [s.id, s.place, s.note]), [['2', 'Lisbon', undefined]]);
+
+// Only an empty logbook can be removed, and never the last one.
+assert.equal(canRemoveLogbook(lib, 'b'), false);
+assert.equal(removeLogbook(lib, 'b'), lib);
+lib = removeLogbook(removeStamp(lib, '2'), 'b');
+assert.deepEqual(lib.logbooks.map((b) => b.id), ['first']);
+assert.equal(lib.currentId, 'first');
+assert.equal(canRemoveLogbook(lib, 'first'), false);
+console.log('library ok');

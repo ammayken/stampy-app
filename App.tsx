@@ -8,9 +8,23 @@ import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDime
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { centerCrop, STAMP_ASPECT, STAMP_PX } from './src/crop';
 import { Fields } from './src/Fields';
+import {
+  addLogbook,
+  addStamp,
+  currentLogbook,
+  editStamp,
+  removeLogbook,
+  removeStamp,
+  renameLogbook,
+  selectLogbook,
+  stampsIn,
+  type Library,
+} from './src/library';
 import { Logbook } from './src/Logbook';
+import { suggestPlace } from './src/place';
+import { Shelf } from './src/Shelf';
 import { Stamp, stampHeight } from './src/Stamp';
-import { keepStamp, loadStamps, stampUri, updateStamp, type StampRecord } from './src/store';
+import { deletePhoto, loadLibrary, saveLibrary, stampUri, storePhoto } from './src/store';
 import { BACKGROUND, FIELD, LABEL, PAPER, SECONDARY } from './src/theme';
 
 function message(e: unknown) {
@@ -18,15 +32,31 @@ function message(e: unknown) {
 }
 
 export default function App() {
+  // Read saved stamps once. If the file is unreadable, stop here rather than risk overwriting it.
+  const [loaded] = useState(() => {
+    try {
+      return { library: loadLibrary() };
+    } catch (e) {
+      return { failure: message(e) };
+    }
+  });
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />
-      <Main />
+      {loaded.library ? (
+        <Main saved={loaded.library} />
+      ) : (
+        <View style={[styles.screen, styles.centered]}>
+          <Ionicons name="warning-outline" size={48} color={PAPER} />
+          <Text style={styles.hint}>Stampy could not read your saved stamps, so it has stopped to keep them safe.</Text>
+          <Text style={styles.hint}>{loaded.failure}</Text>
+        </View>
+      )}
     </SafeAreaProvider>
   );
 }
 
-function Main() {
+function Main({ saved }: { saved: Library }) {
   const [permission, requestPermission] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const [ready, setReady] = useState(false);
@@ -36,14 +66,8 @@ function Main() {
   const [draftUri, setDraftUri] = useState<string | null>(null);
   const [place, setPlace] = useState('');
   const [note, setNote] = useState('');
-  const [stamps, setStamps] = useState<StampRecord[]>(() => {
-    try {
-      return loadStamps();
-    } catch {
-      return []; // keepStamp re-reads the index and reports the problem instead of overwriting it
-    }
-  });
-  const [showLogbook, setShowLogbook] = useState(false);
+  const [library, setLibrary] = useState(saved);
+  const [screen, setScreen] = useState<'camera' | 'logbook' | 'shelf'>('camera');
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
 
@@ -60,6 +84,18 @@ function Main() {
   const roomForStamp = height - insets.top - insets.bottom - BAR_HEIGHT - 80;
   const stampWidth = Math.min(width - 56, 360, (roomForStamp / stampHeight(1000)) * 1000);
 
+  /** Saves a changed library to the phone, then shows it. Returns false if saving failed. */
+  function commit(next: Library) {
+    try {
+      saveLibrary(next);
+      setLibrary(next);
+      return true;
+    } catch (e) {
+      setError(message(e));
+      return false;
+    }
+  }
+
   async function shoot() {
     if (!camera.current || !ready || busy) return;
     setBusy(true);
@@ -67,6 +103,8 @@ function Main() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     flash.setValue(1);
     Animated.timing(flash, { toValue: 0, duration: 350, useNativeDriver: true }).start();
+    // Look up the place in the background; never overwrite something already typed.
+    suggestPlace().then((found) => found && setPlace((typed) => typed || found));
     try {
       const photo = await camera.current.takePictureAsync({ quality: 1 });
       const image = await ImageManipulator.manipulate(photo.uri)
@@ -88,13 +126,16 @@ function Main() {
     setDraftUri(null);
     setPlace('');
     setNote('');
-    setShowLogbook(false);
+    setScreen('camera');
   }
 
   function keep() {
     if (!draftUri) return;
     try {
-      setStamps(keepStamp(draftUri, place, note));
+      const now = new Date();
+      const id = String(now.getTime());
+      storePhoto(draftUri, `${id}.jpg`);
+      if (!commit(addStamp(library, id, `${id}.jpg`, now.toISOString(), place, note))) return;
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       backToCamera();
     } catch (e) {
@@ -102,17 +143,35 @@ function Main() {
     }
   }
 
-  if (showLogbook) {
+  const book = currentLogbook(library);
+  const bookStamps = stampsIn(library, book.id);
+
+  if (screen === 'shelf') {
+    return (
+      <Shelf
+        library={library}
+        onOpen={(id) => {
+          if (commit(selectLogbook(library, id))) setScreen('logbook');
+        }}
+        onCreate={(name) => commit(addLogbook(library, String(Date.now()), name))}
+        onRename={(id, name) => commit(renameLogbook(library, id, name))}
+        onRemove={(id) => commit(removeLogbook(library, id))}
+      />
+    );
+  }
+
+  if (screen === 'logbook') {
     return (
       <Logbook
-        stamps={stamps}
+        key={book.id}
+        logbook={book}
+        stamps={bookStamps}
         onCamera={backToCamera}
-        onEdit={(stamp, newPlace, newNote) => {
-          try {
-            setStamps(updateStamp(stamp.id, newPlace, newNote));
-          } catch (e) {
-            setError(message(e));
-          }
+        onShelf={() => setScreen('shelf')}
+        onEdit={(stamp, newPlace, newNote) => commit(editStamp(library, stamp.id, newPlace, newNote))}
+        onDelete={(stamp) => {
+          // Forget the stamp first; only then remove its photo, so a failure never leaves a stamp without a photo.
+          if (commit(removeStamp(library, stamp.id))) deletePhoto(stamp);
         }}
       />
     );
@@ -126,7 +185,7 @@ function Main() {
         <Ionicons name="camera-outline" size={48} color={PAPER} />
         <Text style={styles.hint}>Stampy needs the camera to make stamps.</Text>
         <Pressable
-          style={({ pressed }) => [styles.button, styles.primary, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.button, styles.primary, styles.lone, pressed && styles.pressed]}
           onPress={requestPermission}
           accessibilityRole="button"
         >
@@ -159,6 +218,7 @@ function Main() {
         </Animated.View>
         {error ? <Text style={styles.hint}>{error}</Text> : null}
         <Fields place={place} note={note} onPlace={setPlace} onNote={setNote} />
+        <Text style={styles.hint}>Goes into {book.name}.</Text>
         <View style={styles.row}>
           <Pressable
             style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.pressed]}
@@ -179,7 +239,7 @@ function Main() {
     );
   }
 
-  const latest = stamps[stamps.length - 1];
+  const latest = bookStamps[bookStamps.length - 1];
   return (
     <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
       <View style={styles.viewfinder}>
@@ -199,18 +259,20 @@ function Main() {
       <View style={styles.bar}>
         <Pressable
           style={({ pressed }) => [styles.side, pressed && styles.pressed]}
-          onPress={() => setShowLogbook(true)}
+          onPress={() => setScreen('logbook')}
           accessibilityRole="button"
-          accessibilityLabel="Open logbook"
+          accessibilityLabel={`Open ${book.name}`}
         >
           {latest ? (
             <Image source={{ uri: stampUri(latest) }} style={styles.thumb} />
           ) : (
-            <View style={[styles.thumb, styles.centered]}>
+            <View style={[styles.thumb, styles.thumbEmpty, { backgroundColor: book.color }]}>
               <Ionicons name="book-outline" size={22} color={PAPER} />
             </View>
           )}
-          <Text style={styles.sideLabel}>Logbook</Text>
+          <Text style={styles.sideLabel} numberOfLines={1}>
+            {book.name}
+          </Text>
         </Pressable>
 
         <Pressable
@@ -242,9 +304,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 28,
+    paddingHorizontal: 20,
   },
-  side: { width: 72, alignItems: 'center', gap: 6 },
+  side: { width: 88, alignItems: 'center', gap: 6 },
   sideLabel: { color: LABEL, fontSize: 12 },
   thumb: {
     width: 42,
@@ -254,6 +316,7 @@ const styles = StyleSheet.create({
     borderColor: PAPER,
     backgroundColor: FIELD,
   },
+  thumbEmpty: { alignItems: 'center', justifyContent: 'center' },
   shutter: {
     width: 78,
     height: 78,
@@ -266,9 +329,10 @@ const styles = StyleSheet.create({
   shutterOff: { opacity: 0.4 },
   shutterCore: { width: 62, height: 62, borderRadius: 31, backgroundColor: PAPER },
   shutterPressed: { transform: [{ scale: 0.88 }] },
-  review: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: 28, paddingHorizontal: 20 },
+  review: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: 24, paddingHorizontal: 20 },
   row: { flexDirection: 'row', gap: 12, alignSelf: 'stretch' },
   button: { flex: 1, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
+  lone: { flex: 0 },
   primary: { backgroundColor: PAPER },
   primaryText: { color: BACKGROUND, fontSize: 17, fontWeight: '600' },
   secondary: { backgroundColor: FIELD },

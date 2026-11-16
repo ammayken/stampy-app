@@ -5,8 +5,10 @@ A phone-only camera app where the stamp is the viewfinder. So far it has:
 - a live camera preview inside a perforated stamp frame on a dark screen, with a round shutter;
 - a photo cropped to the one standard stamp size (3:4, 900 x 1200 px);
 - a capture flash and haptic tap, then a keep-or-retake step with an optional place and note;
-- stamps saved on the phone with their date, shown in a logbook with 12-stamp pages;
-- a sheet for each saved stamp where its place and note can be edited.
+- a place suggested automatically from the phone's location (if you allow it);
+- stamps saved on the phone with their date, shown in logbooks with 12-stamp pages;
+- a shelf of cloth-cover logbooks that you can create, rename and switch between;
+- a sheet for each saved stamp where its place and note can be edited, or the stamp deleted.
 
 Built with Expo SDK 58, React Native and TypeScript. It runs in **Expo Go**, so no Mac,
 Xcode or development build is needed.
@@ -49,10 +51,13 @@ Xcode or development build is needed.
   if Expo Go is deleted.
 - Each saved file is a plain rectangular JPEG. The perforated edge is drawn around it on
   screen, not baked into the file.
-- One logbook only, with no cloth cover yet. Swipe sideways between pages; tap a stamp to
-  see its date and edit its place and note.
-- Place is typed by hand; there is no GPS lookup.
-- No deleting stamps yet. Back camera only, portrait only.
+- In a logbook, swipe sideways between pages and tap a stamp to see its date, edit its place
+  and note, or delete it.
+- New stamps go into the bookmarked logbook, which is the one you opened last. Hold a cover
+  on the shelf to rename it. Only an empty logbook can be removed.
+- The place suggestion is a city and country from the phone's location. It needs location
+  access and a network connection; without them the field just stays empty.
+- Stamps cannot be moved between logbooks yet. Back camera only, portrait only.
 
 ## Checks
 
@@ -66,7 +71,10 @@ Runs the TypeScript type-check and small tests of the crop and page maths (`src/
 
 - `App.tsx` - camera screen, shutter, keep-or-retake step.
 - `src/Stamp.tsx` - the perforated stamp frame.
+- `src/Shelf.tsx` - the shelf of cloth-cover logbooks.
 - `src/Logbook.tsx` - logbook pages.
+- `src/library.ts` - logbooks and stamps as data, and every change to them.
+- `src/place.ts` - place suggestion from the phone's location.
 - `src/StampSheet.tsx` - the sheet for one saved stamp.
 - `src/Fields.tsx`, `src/theme.ts` - place and note inputs, shared colours.
 - `src/store.ts` - saving and loading stamps on the phone.
