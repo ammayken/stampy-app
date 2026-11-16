@@ -58,4 +58,17 @@ lib = removeLogbook(removeStamp(lib, '2'), 'b');
 assert.deepEqual(lib.logbooks.map((b) => b.id), ['first']);
 assert.equal(lib.currentId, 'first');
 assert.equal(canRemoveLogbook(lib, 'first'), false);
+
+import { COVER_COLORS, moveStamp, recolorLogbook } from './library.ts';
+
+// Moving a stamp changes only its logbook; an unknown logbook is ignored.
+lib = addLogbook(lib, 'c', 'Food');
+assert.equal(moveStamp(lib, '1', 'nowhere'), lib);
+lib = moveStamp(lib, '1', 'c');
+assert.deepEqual([stampsIn(lib, 'first').length, stampsIn(lib, 'c').length], [0, 1]);
+// Recolouring steps through the colours and wraps back to the first.
+let recolored = lib;
+for (const _ of COVER_COLORS) recolored = recolorLogbook(recolored, 'first');
+assert.equal(recolorLogbook(lib, 'first').logbooks[0].color, COVER_COLORS[1]);
+assert.equal(recolored.logbooks[0].color, COVER_COLORS[0]);
 console.log('library ok');

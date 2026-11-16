@@ -54,6 +54,17 @@ export function editStamp(lib: Library, id: string, place: string, note: string)
   return { ...lib, stamps: lib.stamps.map((s) => (s.id === id ? { ...s, place: clean(place), note: clean(note) } : s)) };
 }
 
+export function moveStamp(lib: Library, id: string, logbookId: string): Library {
+  if (!lib.logbooks.some((b) => b.id === logbookId)) return lib;
+  return { ...lib, stamps: lib.stamps.map((s) => (s.id === id ? { ...s, logbookId } : s)) };
+}
+
+/** Gives a logbook the next cover colour in the list, wrapping around. */
+export function recolorLogbook(lib: Library, id: string): Library {
+  const next = (color: string) => COVER_COLORS[(COVER_COLORS.indexOf(color) + 1) % COVER_COLORS.length];
+  return { ...lib, logbooks: lib.logbooks.map((b) => (b.id === id ? { ...b, color: next(b.color) } : b)) };
+}
+
 export function removeStamp(lib: Library, id: string): Library {
   return { ...lib, stamps: lib.stamps.filter((s) => s.id !== id) };
 }

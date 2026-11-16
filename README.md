@@ -57,7 +57,11 @@ Xcode or development build is needed.
   on the shelf to rename it. Only an empty logbook can be removed.
 - The place suggestion is a city and country from the phone's location. It needs location
   access and a network connection; without them the field just stays empty.
-- Stamps cannot be moved between logbooks yet. Back camera only, portrait only.
+- From a stamp's sheet you can share it (a picture of the stamp with its perforated edge on
+  a dark card, through the iOS share sheet) or move it to another logbook. The shared
+  picture is a screen snapshot, so it is smaller than the stored 900 x 1200 photo.
+- Hold a cover on the shelf to change its colour.
+- Back camera only, portrait only.
 
 ## Checks
 

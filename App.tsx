@@ -13,6 +13,8 @@ import {
   addStamp,
   currentLogbook,
   editStamp,
+  moveStamp,
+  recolorLogbook,
   removeLogbook,
   removeStamp,
   renameLogbook,
@@ -155,6 +157,7 @@ function Main({ saved }: { saved: Library }) {
         }}
         onCreate={(name) => commit(addLogbook(library, String(Date.now()), name))}
         onRename={(id, name) => commit(renameLogbook(library, id, name))}
+        onRecolor={(id) => commit(recolorLogbook(library, id))}
         onRemove={(id) => commit(removeLogbook(library, id))}
       />
     );
@@ -168,7 +171,9 @@ function Main({ saved }: { saved: Library }) {
         stamps={bookStamps}
         onCamera={backToCamera}
         onShelf={() => setScreen('shelf')}
+        otherLogbooks={library.logbooks.filter((b) => b.id !== book.id)}
         onEdit={(stamp, newPlace, newNote) => commit(editStamp(library, stamp.id, newPlace, newNote))}
+        onMove={(stamp, logbookId) => commit(moveStamp(library, stamp.id, logbookId))}
         onDelete={(stamp) => {
           // Forget the stamp first; only then remove its photo, so a failure never leaves a stamp without a photo.
           if (commit(removeStamp(library, stamp.id))) deletePhoto(stamp);

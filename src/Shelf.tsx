@@ -12,8 +12,10 @@ export function Shelf({
   onOpen,
   onCreate,
   onRename,
+  onRecolor,
   onRemove,
 }: {
+  onRecolor: (id: string) => void;
   library: Library;
   onOpen: (id: string) => void;
   onCreate: (name: string) => void;
@@ -45,6 +47,7 @@ export function Shelf({
       );
     Alert.alert(book.name, canRemoveLogbook(library, book.id) ? undefined : 'Only an empty logbook can be removed, and one must always remain.', [
       { text: 'Rename', onPress: rename },
+      { text: 'Change Colour', onPress: () => onRecolor(book.id) },
       ...(canRemoveLogbook(library, book.id)
         ? [{ text: 'Remove', style: 'destructive' as const, onPress: () => onRemove(book.id) }]
         : []),
@@ -96,7 +99,7 @@ export function Shelf({
         })}
       </ScrollView>
       <Text style={[styles.footnote, { paddingBottom: insets.bottom + 8 }]}>
-        New stamps go into the bookmarked logbook. Hold a logbook to rename it.
+        New stamps go into the bookmarked logbook. Hold a logbook to rename or recolour it.
       </Text>
     </View>
   );

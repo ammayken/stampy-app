@@ -20,11 +20,15 @@ export function Logbook({
   stamps,
   onCamera,
   onShelf,
+  otherLogbooks,
   onEdit,
+  onMove,
   onDelete,
 }: {
   logbook: LogbookRecord;
   stamps: StampRecord[];
+  otherLogbooks: LogbookRecord[];
+  onMove: (stamp: StampRecord, logbookId: string) => void;
   onCamera: () => void;
   onShelf: () => void;
   onEdit: (stamp: StampRecord, place: string, note: string) => void;
@@ -125,6 +129,11 @@ export function Logbook({
 
       <StampSheet
         stamp={selected}
+        otherLogbooks={otherLogbooks}
+        onMove={(stamp, logbookId) => {
+          setSelected(null);
+          onMove(stamp, logbookId);
+        }}
         onDone={(stamp, place, note) => {
           setSelected(null);
           if (place.trim() !== (stamp.place ?? '') || note.trim() !== (stamp.note ?? '')) onEdit(stamp, place, note);
