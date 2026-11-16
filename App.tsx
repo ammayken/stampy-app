@@ -11,7 +11,11 @@ import { centerCrop, STAMP_ASPECT, STAMP_PX } from './src/crop';
 import { Fields } from './src/Fields';
 import {
   addLogbook,
+  addPage,
   addStamp,
+  pagesOf,
+  placeStamp,
+  removePage,
   currentLogbook,
   editStamp,
   moveStamp,
@@ -196,7 +200,10 @@ function Main({ saved }: { saved: Library }) {
       <Logbook
         key={book.id}
         logbook={book}
-        stamps={bookStamps}
+        pages={pagesOf(library, book.id)}
+        onAddPage={() => commit(addPage(library, book.id))}
+        onRemovePage={(page) => commit(removePage(library, book.id, page))}
+        onPlace={(stamp, slot) => commit(placeStamp(library, stamp.id, slot))}
         onCamera={backToCamera}
         onShelf={() => setScreen('shelf')}
         onPaper={(color) => commit(setPaper(library, book.id, color))}

@@ -13,9 +13,12 @@ export function StampSheet({
   stamp,
   otherLogbooks,
   onDone,
+  onRearrange,
   onMove,
   onDelete,
 }: {
+  /** Close the sheet and start moving this stamp to another place in its album. */
+  onRearrange: (stamp: StampRecord) => void;
   stamp: StampRecord | null;
   /** Logbooks this stamp could be moved to. */
   otherLogbooks: Logbook[];
@@ -99,6 +102,8 @@ export function StampSheet({
 
             <View style={styles.group}>
               <Row icon="share-outline" label="Share Stamp" onPress={share} />
+              <View style={styles.separator} />
+              <Row icon="move-outline" label="Move on Pages" onPress={() => onRearrange(stamp)} />
               {otherLogbooks.length > 0 ? (
                 <>
                   <View style={styles.separator} />

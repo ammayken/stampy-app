@@ -53,6 +53,11 @@ Xcode or development build is needed.
   screen, not baked into the file.
 - In an album, swipe sideways between pages and tap a stamp to see its date, edit its place
   and note, or delete it.
+- Each page has 12 places and every stamp has its own place. "Add Page" adds an empty page
+  at any time; an empty page can be removed. A new stamp lands in the first empty place.
+- To move a stamp, hold it (or use "Move on Pages" in its sheet), then tap the place it
+  should go, on any page. Tapping another stamp swaps the two. This is pick-up-and-place,
+  not dragging.
 - New stamps go into the bookmarked album, which is the one you opened last. Tap ... on a cover
   on the Stamp Albums page to rename it. Only an empty album can be removed.
 - The place suggestion is a city and country from the phone's location. It needs location

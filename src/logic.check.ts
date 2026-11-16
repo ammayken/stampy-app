@@ -11,14 +11,6 @@ assert.deepEqual(centerCrop(1080, 1920, STAMP_ASPECT), { originX: 0, originY: 24
 
 console.log('centerCrop ok');
 
-import { pagesOf } from './pages.ts';
-
-assert.deepEqual(pagesOf([]), [[]]);
-assert.deepEqual(pagesOf([1, 2, 3], 2), [[1, 2], [3]]);
-assert.equal(pagesOf(Array.from({ length: 12 })).length, 1);
-assert.equal(pagesOf(Array.from({ length: 13 })).length, 2);
-console.log('pagesOf ok');
-
 import { fitStamp } from './pages.ts';
 
 // Wide, short area: the height decides. 4 rows of 100*1.3 plus 3 gaps of 10 = 550.
@@ -93,3 +85,42 @@ assert.ok(outline.startsWith('M0 0L7 0A3 3 0 0 0 13 0'));
 // Every paper colour gets ink that contrasts with it.
 assert.deepEqual(PAPER_COLORS.map(inkOn).map((ink) => ink === '#2a2622'), [true, true, true, true, true, true, false]);
 console.log('perforation ok');
+
+import { addPage, canRemovePage, firstFreeSlot, pageCount, pagesOf, placeStamp, removePage } from './library.ts';
+
+// Stamps saved before slots existed get slots in order; saved slots are kept and never doubled up.
+const at = (id: string, more = {}) => ({ id, file: `${id}.jpg`, takenAt: '2026-11-16T00:00:00.000Z', ...more });
+let book = toLibrary([at('a'), at('b'), at('c')]);
+assert.deepEqual(book.stamps.map((s) => s.slot), [0, 1, 2]);
+const mixed = toLibrary({ ...book, stamps: [{ ...at('a'), logbookId: 'first', slot: 1 }, { ...at('b'), logbookId: 'first' }] });
+assert.deepEqual(mixed.stamps.map((s) => s.slot), [1, 0]);
+const slotsOf = (l: typeof book) => Object.fromEntries(l.stamps.map((s) => [s.id, s.slot]));
+
+// One page to start; Add Page works straight away, without filling the first page.
+assert.equal(pageCount(book, 'first'), 1);
+book = addPage(book, 'first');
+assert.equal(pagesOf(book, 'first').length, 2);
+assert.equal(pagesOf(book, 'first')[0][1]?.id, 'b');
+
+// Placing on an empty slot moves the stamp; placing on a taken slot swaps the two.
+book = placeStamp(book, 'a', 14); // page 2, third place
+assert.deepEqual(slotsOf(book), { a: 14, b: 1, c: 2 });
+assert.equal(pagesOf(book, 'first')[1][2]?.id, 'a');
+book = placeStamp(book, 'c', 1);
+assert.deepEqual(slotsOf(book), { a: 14, b: 2, c: 1 });
+assert.equal(placeStamp(book, 'c', 1), book);
+// A new stamp lands in the first gap, not after the last stamp.
+assert.equal(firstFreeSlot(book, 'first'), 0);
+
+// Only an empty page that is not the only page can be removed; later stamps move forward a page.
+assert.equal(canRemovePage(book, 'first', 1), false);
+book = placeStamp(placeStamp(book, 'b', 30), 'c', 31); // b and c to page 3; page 1 is now empty
+assert.equal(pageCount(book, 'first'), 3);
+assert.equal(canRemovePage(book, 'first', 0), true);
+book = removePage(book, 'first', 0);
+assert.deepEqual(slotsOf(book), { a: 2, b: 18, c: 19 });
+assert.equal(pageCount(book, 'first'), 2);
+const single = toLibrary([]);
+assert.equal(canRemovePage(single, 'first', 0), false);
+assert.equal(removePage(single, 'first', 0), single);
+console.log('pages and slots ok');
