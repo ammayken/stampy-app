@@ -2,17 +2,38 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { StatusBar } from 'expo-status-bar';
 import { useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { BACKGROUND, Stamp } from './src/Stamp';
+import {
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { centerCrop, STAMP_ASPECT, STAMP_PX } from './src/crop';
+import { Logbook } from './src/Logbook';
+import { BACKGROUND, PAPER, Stamp } from './src/Stamp';
+import { keepStamp, loadStamps, type StampRecord } from './src/store';
+
+function message(e: unknown) {
+  return e instanceof Error ? e.message : String(e);
+}
 
 export default function App() {
   const [permission, requestPermission] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [stampUri, setStampUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A freshly taken stamp that has not been kept yet.
+  const [draftUri, setDraftUri] = useState<string | null>(null);
+  const [place, setPlace] = useState('');
+  const [note, setNote] = useState('');
+  const [stamps, setStamps] = useState<StampRecord[] | null>(null);
+  const [showLogbook, setShowLogbook] = useState(false);
   const { width: screenWidth } = useWindowDimensions();
   const stampWidth = Math.min(screenWidth - 72, 340);
 
@@ -27,12 +48,49 @@ export default function App() {
         .resize(STAMP_PX)
         .renderAsync();
       const stamp = await image.saveAsync({ format: SaveFormat.JPEG, compress: 0.9 });
-      setStampUri(stamp.uri);
+      setDraftUri(stamp.uri);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(message(e));
     } finally {
       setBusy(false);
     }
+  }
+
+  function backToCamera() {
+    setReady(false); // the camera view remounts and reports ready again
+    setDraftUri(null);
+    setPlace('');
+    setNote('');
+    setShowLogbook(false);
+  }
+
+  function keep() {
+    if (!draftUri) return;
+    try {
+      setStamps(keepStamp(draftUri, place, note));
+      backToCamera();
+      setShowLogbook(true);
+    } catch (e) {
+      setError(message(e));
+    }
+  }
+
+  function openLogbook() {
+    try {
+      setStamps(loadStamps());
+      setShowLogbook(true);
+    } catch (e) {
+      setError(message(e));
+    }
+  }
+
+  if (showLogbook && stamps) {
+    return (
+      <>
+        <StatusBar style="light" />
+        <Logbook stamps={stamps} onClose={backToCamera} />
+      </>
+    );
   }
 
   let body;
@@ -42,36 +100,48 @@ export default function App() {
     body = (
       <>
         <Text style={styles.hint}>Stampy needs the camera to make stamps.</Text>
-        <Pressable
-          style={styles.button}
-          onPress={requestPermission}
-          accessibilityRole="button"
-        >
+        <Pressable style={styles.button} onPress={requestPermission} accessibilityRole="button">
           <Text style={styles.buttonText}>
             {permission.canAskAgain ? 'Allow camera' : 'Camera is blocked in Settings'}
           </Text>
         </Pressable>
       </>
     );
-  } else if (stampUri) {
+  } else if (draftUri) {
     body = (
       <>
-        <Stamp width={stampWidth}>
-          <Image source={{ uri: stampUri }} style={StyleSheet.absoluteFill} />
+        <Stamp width={Math.min(stampWidth, 200)}>
+          <Image source={{ uri: draftUri }} style={StyleSheet.absoluteFill} />
         </Stamp>
-        <Text style={styles.hint}>
-          Stamp saved at {STAMP_PX.width} x {STAMP_PX.height} px.
-        </Text>
-        <Pressable
-          style={styles.button}
-          onPress={() => {
-            setReady(false);
-            setStampUri(null);
-          }}
-          accessibilityRole="button"
-        >
-          <Text style={styles.buttonText}>Take another</Text>
-        </Pressable>
+        {error ? <Text style={styles.hint}>{error}</Text> : null}
+        <TextInput
+          style={styles.input}
+          value={place}
+          onChangeText={setPlace}
+          placeholder="Place (optional)"
+          placeholderTextColor="#8a8272"
+          maxLength={60}
+          returnKeyType="done"
+          accessibilityLabel="Place"
+        />
+        <TextInput
+          style={styles.input}
+          value={note}
+          onChangeText={setNote}
+          placeholder="Note (optional)"
+          placeholderTextColor="#8a8272"
+          maxLength={140}
+          returnKeyType="done"
+          accessibilityLabel="Note"
+        />
+        <View style={styles.row}>
+          <Pressable style={styles.button} onPress={backToCamera} accessibilityRole="button">
+            <Text style={styles.buttonText}>Retake</Text>
+          </Pressable>
+          <Pressable style={[styles.button, styles.primary]} onPress={keep} accessibilityRole="button">
+            <Text style={[styles.buttonText, styles.primaryText]}>Keep stamp</Text>
+          </Pressable>
+        </View>
       </>
     );
   } else {
@@ -96,44 +166,50 @@ export default function App() {
         >
           <View style={styles.shutterCore} />
         </Pressable>
+        <Pressable onPress={openLogbook} hitSlop={12} accessibilityRole="button">
+          <Text style={styles.link}>Logbook</Text>
+        </Pressable>
       </>
     );
   }
 
   return (
-    <View style={styles.screen}>
-      <StatusBar style="light" />
-      {body}
-    </View>
+    <KeyboardAvoidingView style={styles.flex} behavior="padding">
+      <Pressable style={styles.screen} onPress={Keyboard.dismiss} accessible={false}>
+        <StatusBar style="light" />
+        {body}
+      </Pressable>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: BACKGROUND,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 28,
-  },
+  flex: { flex: 1, backgroundColor: BACKGROUND },
+  screen: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22 },
   hint: { color: '#d8cfbd', fontSize: 16, textAlign: 'center', paddingHorizontal: 24 },
+  link: { color: '#d8cfbd', fontSize: 16, textDecorationLine: 'underline' },
+  input: {
+    width: 280,
+    color: PAPER,
+    fontSize: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#8a8272',
+    paddingVertical: 8,
+  },
+  row: { flexDirection: 'row', gap: 14 },
   shutter: {
     width: 76,
     height: 76,
     borderRadius: 38,
     borderWidth: 4,
-    borderColor: '#f3ecdc',
+    borderColor: PAPER,
     alignItems: 'center',
     justifyContent: 'center',
   },
   shutterOff: { opacity: 0.4 },
-  shutterCore: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#f3ecdc' },
-  button: {
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: '#f3ecdc',
-  },
-  buttonText: { color: '#f3ecdc', fontSize: 16 },
+  shutterCore: { width: 58, height: 58, borderRadius: 29, backgroundColor: PAPER },
+  button: { paddingHorizontal: 22, paddingVertical: 12, borderRadius: 24, borderWidth: 1, borderColor: PAPER },
+  primary: { backgroundColor: PAPER },
+  primaryText: { color: BACKGROUND },
+  buttonText: { color: PAPER, fontSize: 16 },
 });

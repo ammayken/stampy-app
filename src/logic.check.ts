@@ -10,3 +10,11 @@ assert.deepEqual(centerCrop(4032, 3024, STAMP_ASPECT), { originX: 882, originY: 
 assert.deepEqual(centerCrop(1080, 1920, STAMP_ASPECT), { originX: 0, originY: 240, width: 1080, height: 1440 });
 
 console.log('centerCrop ok');
+
+import { pagesOf } from './pages.ts';
+
+assert.deepEqual(pagesOf([]), [[]]);
+assert.deepEqual(pagesOf([1, 2, 3], 2), [[1, 2], [3]]);
+assert.equal(pagesOf(Array.from({ length: 12 })).length, 1);
+assert.equal(pagesOf(Array.from({ length: 13 })).length, 2);
+console.log('pagesOf ok');
