@@ -2,10 +2,21 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef, useState } from 'react';
-import { FlatList, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  Animated,
+  FlatList,
+  Image,
+  PanResponder,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+  type GestureResponderEvent,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PAPER_COLORS, paperOf, STAMPS_PER_PAGE, type Logbook as LogbookRecord, type StampRecord } from './library';
-import { fitStamp } from './pages';
+import { fitStamp, placeAt } from './pages';
 import { inkOn } from './perforation';
 import { Stamp, stampHeight } from './Stamp';
 import { StampSheet } from './StampSheet';
@@ -15,6 +26,8 @@ const COLUMNS = 3;
 const ROWS = STAMPS_PER_PAGE / COLUMNS;
 const GAP = 12;
 const ASPECT = stampHeight(1000) / 1000; // stamp paper height / width
+const EDGE = 34; // dragging a stamp this close to a screen edge turns the page
+const EDGE_WAIT = 600; // ...after holding it there this long (ms)
 
 /** One album: pages of 12 places on textured paper. Stamps can be picked up and put in any place. */
 export function Logbook({
@@ -74,9 +87,98 @@ export function Logbook({
     pageTotal.current = pages.length;
   }, [pages.length]);
 
-  const pickUp = (stamp: StampRecord) => {
+  // --- Drag and drop -------------------------------------------------------------------
+  // Holding a stamp picks it up (`carrying`). While the finger stays down (`held`) the stamp
+  // follows it and drops where the finger lifts. If the finger lifts without moving, the
+  // stamp stays picked up and a tap on any place puts it there instead.
+  const [held, setHeld] = useState(false);
+  const [hover, setHover] = useState(-1); // slot under the dragged stamp
+  const finger = useRef(new Animated.ValueXY()).current; // finger position on screen
+  const gridView = useRef<React.ComponentRef<typeof View>>(null);
+  const gridOrigin = useRef({ x: 0, y: 0 }); // top left of the grid on screen
+  const dragging = useRef(false); // the drag gesture has taken over from the press
+  const edge = useRef<{ side: number; timer: ReturnType<typeof setTimeout> | null }>({ side: 0, timer: null });
+  // The gesture handlers are created once, so they read current values through this ref.
+  const now = useRef({ carrying, held, page, pageTotal: pages.length, width, gridHeight, stampWidth, onPlace });
+  now.current = { carrying, held, page, pageTotal: pages.length, width, gridHeight, stampWidth, onPlace };
+
+  const slotUnder = (x: number, y: number) => {
+    const n = now.current;
+    const place = placeAt(
+      x - gridOrigin.current.x,
+      y - gridOrigin.current.y,
+      { width: n.width, height: n.gridHeight },
+      { width: n.stampWidth, height: n.stampWidth * ASPECT },
+      COLUMNS,
+      ROWS,
+      GAP,
+    );
+    return place < 0 ? -1 : n.page * STAMPS_PER_PAGE + place;
+  };
+  const leaveEdge = () => {
+    if (edge.current.timer) clearTimeout(edge.current.timer);
+    edge.current = { side: 0, timer: null };
+  };
+  const endDrag = () => {
+    leaveEdge();
+    dragging.current = false;
+    setHeld(false);
+    setHover(-1);
+  };
+  const turnPage = (by: number) => {
+    const n = now.current;
+    const target = Math.min(n.pageTotal - 1, Math.max(0, n.page + by));
+    if (target === n.page) return;
+    list.current?.scrollToIndex({ index: target, animated: true });
+    setScrolledTo(target);
+  };
+
+  const pan = useRef(
+    PanResponder.create({
+      // Take over only while a stamp is held, so ordinary swipes still turn pages.
+      onMoveShouldSetPanResponderCapture: () => now.current.held,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: () => {
+        dragging.current = true;
+      },
+      onPanResponderMove: (_, gesture) => {
+        finger.setValue({ x: gesture.moveX, y: gesture.moveY });
+        setHover(slotUnder(gesture.moveX, gesture.moveY));
+        const side = gesture.moveX < EDGE ? -1 : gesture.moveX > now.current.width - EDGE ? 1 : 0;
+        if (side !== edge.current.side) {
+          leaveEdge();
+          if (side) edge.current = { side, timer: setTimeout(() => (leaveEdge(), turnPage(side)), EDGE_WAIT) };
+        }
+      },
+      onPanResponderRelease: (_, gesture) => {
+        const slot = slotUnder(gesture.moveX, gesture.moveY);
+        const stamp = now.current.carrying;
+        if (stamp && slot >= 0) {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          now.current.onPlace(stamp, slot);
+        }
+        setCarrying(null); // dropped off the page: nothing moves
+        endDrag();
+      },
+      onPanResponderTerminate: endDrag,
+    }),
+  ).current;
+
+  /** Picks a stamp up. With the touch that did it, the stamp also starts following the finger. */
+  const pickUp = (stamp: StampRecord, touch?: GestureResponderEvent) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setCarrying(stamp);
+    if (!touch) return;
+    finger.setValue({ x: touch.nativeEvent.pageX, y: touch.nativeEvent.pageY });
+    gridView.current?.measureInWindow((x, y) => (gridOrigin.current = { x, y }));
+    dragging.current = false;
+    setHeld(true);
+  };
+  /** The finger lifted off a stamp. If no drag began, stop following the finger but keep the stamp picked up. */
+  const letGo = () => {
+    setTimeout(() => {
+      if (!dragging.current) setHeld(false);
+    }, 0);
   };
   const putDown = (slot: number) => {
     if (!carrying) return;
@@ -129,14 +231,16 @@ export function Logbook({
         </Text>
         {carrying ? (
           <View style={styles.moving}>
-            <Text style={[styles.movingText, { color: ink }]}>Tap where the stamp should go. Swipe for other pages.</Text>
+            <Text style={[styles.movingText, { color: ink }]} numberOfLines={1} adjustsFontSizeToFit>
+              {held ? 'Drop it in place. Hold at an edge to turn the page.' : 'Tap where it should go. Swipe for other pages.'}
+            </Text>
             <Pressable onPress={() => setCarrying(null)} hitSlop={12} accessibilityRole="button">
               <Text style={[styles.cancel, { color: ink }]}>Cancel</Text>
             </Pressable>
           </View>
         ) : (
           <Text style={[styles.subtitle, { color: ink }]}>
-            {count === 0 ? 'No stamps yet' : `${count === 1 ? '1 stamp' : `${count} stamps`} · hold a stamp to move it`}
+            {count === 0 ? 'No stamps yet' : `${count === 1 ? '1 stamp' : `${count} stamps`} · hold a stamp to drag it`}
           </Text>
         )}
       </View>
@@ -157,12 +261,18 @@ export function Logbook({
         </View>
       ) : null}
 
-      <View style={styles.grid} onLayout={(e) => setGridHeight(e.nativeEvent.layout.height)}>
+      <View
+        ref={gridView}
+        style={styles.grid}
+        onLayout={(e) => setGridHeight(e.nativeEvent.layout.height)}
+        {...pan.panHandlers}
+      >
         {stampWidth > 0 ? (
           <FlatList
             ref={list}
             data={pages}
-            extraData={carrying}
+            extraData={`${carrying?.id} ${held} ${hover}`}
+            scrollEnabled={!held}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
@@ -179,11 +289,12 @@ export function Logbook({
                       const slot = pageIndex * STAMPS_PER_PAGE + place;
                       const stamp = item[place];
                       const size = { width: stampWidth, height: stampWidth * ASPECT };
+                      const isTarget = held && hover === slot; // the dragged stamp would land here
                       if (!stamp) {
                         return carrying ? (
                           <Pressable
                             key={place}
-                            style={[styles.slot, styles.slotOpen, { borderColor: ink }, size]}
+                            style={[styles.slot, styles.slotOpen, isTarget && styles.slotTarget, { borderColor: ink }, size]}
                             onPress={() => putDown(slot)}
                             accessibilityRole="button"
                             accessibilityLabel={`Empty place ${place + 1} on page ${pageIndex + 1}. Put the stamp here.`}
@@ -196,9 +307,14 @@ export function Logbook({
                       return (
                         <Pressable
                           key={stamp.id}
-                          style={({ pressed }) => [pressed && styles.pressed, isCarried && styles.carried]}
+                          style={({ pressed }) => [
+                            pressed && !carrying && styles.pressed,
+                            isCarried && (held ? styles.lifted : styles.carried),
+                            isTarget && !isCarried && styles.swapTarget,
+                          ]}
                           onPress={() => (carrying ? (isCarried ? setCarrying(null) : putDown(slot)) : setSelected(stamp))}
-                          onLongPress={() => pickUp(stamp)}
+                          onLongPress={(touch) => pickUp(stamp, touch)}
+                          onPressOut={letGo}
                           accessibilityRole="button"
                           accessibilityLabel={`Stamp from ${new Date(stamp.takenAt).toLocaleDateString()}`}
                           accessibilityHint={carrying ? 'Swaps places with the stamp being moved.' : 'Opens the stamp. Hold to move it.'}
@@ -253,6 +369,26 @@ export function Logbook({
         </View>
       </View>
 
+      {/* The stamp being dragged, drawn a little larger under the finger. */}
+      {held && carrying ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.floating,
+            {
+              transform: [
+                { translateX: Animated.subtract(finger.x, stampWidth * 0.6) },
+                { translateY: Animated.subtract(finger.y, stampWidth * ASPECT * 0.75) },
+              ],
+            },
+          ]}
+        >
+          <Stamp width={stampWidth * 1.2}>
+            <Image source={{ uri: stampUri(carrying) }} style={StyleSheet.absoluteFill} />
+          </Stamp>
+        </Animated.View>
+      ) : null}
+
       <StampSheet
         stamp={selected}
         otherLogbooks={otherLogbooks}
@@ -289,13 +425,26 @@ const styles = StyleSheet.create({
   title: { fontSize: 34, fontWeight: '700' },
   subtitle: { opacity: 0.7, fontSize: 15 },
   moving: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  // Same line height as the subtitle, so the grid below never shifts when a stamp is picked up.
   movingText: { flex: 1, fontSize: 15, fontWeight: '600' },
-  cancel: { fontSize: 17, fontWeight: '600', textDecorationLine: 'underline' },
+  cancel: { fontSize: 15, fontWeight: '600', textDecorationLine: 'underline' },
   swatches: { flexDirection: 'row', justifyContent: 'center', gap: 12, paddingBottom: 12 },
   swatch: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, opacity: 0.9 },
   swatchOn: { borderWidth: 3, opacity: 1 },
   pressed: { opacity: 0.6 },
   carried: { opacity: 0.45, transform: [{ scale: 0.92 }] },
+  lifted: { opacity: 0.15 }, // its place while the stamp itself is under the finger
+  swapTarget: { opacity: 0.6, transform: [{ scale: 0.92 }] },
+  slotTarget: { borderWidth: 3, opacity: 1 },
+  floating: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    shadowColor: '#000',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 8 },
+  },
   grid: { flex: 1 },
   slot: { borderWidth: 1, borderStyle: 'dashed', borderRadius: 2, opacity: 0.25 },
   slotOpen: { borderWidth: 2, opacity: 0.7 },

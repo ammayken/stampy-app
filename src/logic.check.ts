@@ -24,6 +24,22 @@ for (const [w, h] of [[350, 600], [335, 480], [390, 640], [0, 0]]) {
 }
 console.log('fitStamp ok');
 
+import { placeAt } from './pages.ts';
+
+// A 3 x 4 grid of 100 x 130 stamps with 10 gaps, centred in 400 x 600: it starts at (40, 25).
+const where = (x: number, y: number) => placeAt(x, y, { width: 400, height: 600 }, { width: 100, height: 130 }, 3, 4, 10);
+assert.equal(where(90, 90), 0); // middle of the first stamp
+assert.equal(where(200, 90), 1);
+assert.equal(where(310, 90), 2);
+assert.equal(where(90, 230), 3); // second row
+assert.equal(where(310, 510), 11); // last place
+assert.equal(where(144, 90), 0); // in the gap, nearer the first stamp
+assert.equal(where(146, 90), 1); // in the gap, nearer the second
+assert.equal(where(5, 5), 0); // the page margin still counts as the nearest place
+assert.equal(where(-1, 90), -1); // off the page
+assert.equal(where(200, 601), -1);
+console.log('placeAt ok');
+
 import { addLogbook, addStamp, canRemoveLogbook, removeLogbook, removeStamp, stampsIn, toLibrary } from './library.ts';
 
 // Stamps saved by the first app version (a bare list) land in a default logbook.
