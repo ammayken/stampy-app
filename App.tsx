@@ -19,6 +19,7 @@ import {
   removeStamp,
   renameLogbook,
   selectLogbook,
+  setPaper,
   stampsIn,
   type Library,
 } from './src/library';
@@ -171,6 +172,7 @@ function Main({ saved }: { saved: Library }) {
         stamps={bookStamps}
         onCamera={backToCamera}
         onShelf={() => setScreen('shelf')}
+        onPaper={(color) => commit(setPaper(library, book.id, color))}
         otherLogbooks={library.logbooks.filter((b) => b.id !== book.id)}
         onEdit={(stamp, newPlace, newNote) => commit(editStamp(library, stamp.id, newPlace, newNote))}
         onMove={(stamp, logbookId) => commit(moveStamp(library, stamp.id, logbookId))}

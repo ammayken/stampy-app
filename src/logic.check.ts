@@ -71,4 +71,23 @@ let recolored = lib;
 for (const _ of COVER_COLORS) recolored = recolorLogbook(recolored, 'first');
 assert.equal(recolorLogbook(lib, 'first').logbooks[0].color, COVER_COLORS[1]);
 assert.equal(recolored.logbooks[0].color, COVER_COLORS[0]);
+
+import { PAPER_COLORS, paperOf, setPaper } from './library.ts';
+
+// Logbooks saved before pages had a colour get the default paper; a chosen paper sticks.
+assert.equal(paperOf(lib.logbooks[0]), PAPER_COLORS[0]);
+assert.equal(paperOf(setPaper(lib, 'first', '#2b2a28').logbooks[0]), '#2b2a28');
 console.log('library ok');
+
+import { inkOn, stampPath } from './perforation.ts';
+
+// The outline is one closed shape with one bite per perforation: 5 across and 7 down, twice each.
+const outline = stampPath(100, 140, 6, 20);
+assert.ok(outline.startsWith('M0 0') && outline.endsWith('Z'));
+assert.equal(outline.match(/A/g)?.length, (5 + 7) * 2);
+assert.ok(!outline.includes('NaN'));
+// First bite on the top edge: from x=7 to x=13, centred on 10.
+assert.ok(outline.startsWith('M0 0L7 0A3 3 0 0 0 13 0'));
+// Every paper colour gets ink that contrasts with it.
+assert.deepEqual(PAPER_COLORS.map(inkOn).map((ink) => ink === '#2a2622'), [true, true, true, true, true, true, false]);
+console.log('perforation ok');

@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import { View } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { STAMP_ASPECT } from './crop';
-
-import { BACKGROUND, PAPER } from './theme';
+import { stampPath } from './perforation';
+import { PAPER } from './theme';
 
 /** Outer paper height for a given outer paper width. */
 export function stampHeight(width: number) {
@@ -10,56 +11,35 @@ export function stampHeight(width: number) {
   return (width - margin * 2) / STAMP_ASPECT + margin * 2;
 }
 
+const SHADOW = 3; // room around the paper for its shadow
+
 /**
  * The stamp: cream paper with a perforated edge and a 3:4 window for `children`
  * (the live camera or a photo). `width` is the outer paper width; everything scales with it.
- *
- * ponytail: the perforations are dots in `holeColor` sitting on the paper edge, so they
- * only read as holes on a flat surface of that colour. Use an SVG/Skia mask when stamps
- * need to sit on textured pages or be exported with the edge baked in.
+ * The perforations are real cut-outs, so the stamp can sit on any colour or texture.
  */
-export function Stamp({
-  width,
-  holeColor = BACKGROUND,
-  children,
-}: {
-  width: number;
-  holeColor?: string;
-  children?: ReactNode;
-}) {
+export function Stamp({ width, children }: { width: number; children?: ReactNode }) {
   const scale = width / 340;
   const margin = 14 * scale; // paper border around the picture
-  const hole = 12 * scale; // perforation diameter
-  const pitch = 20 * scale; // target distance between perforations
   const height = stampHeight(width);
-
-  const dot = { position: 'absolute', width: hole, height: hole, borderRadius: hole / 2, backgroundColor: holeColor } as const;
-  // Evenly spaced hole offsets along an edge of the given length.
-  const edge = (length: number) => {
-    const count = Math.round(length / pitch);
-    const step = length / count;
-    return Array.from({ length: count }, (_, i) => (i + 0.5) * step - hole / 2);
-  };
+  const outline = stampPath(width, height, 12 * scale, 20 * scale);
 
   return (
-    <View style={{ width, height, backgroundColor: PAPER }}>
+    <View style={{ width, height }}>
+      <Svg
+        width={width + SHADOW * 2}
+        height={height + SHADOW * 2}
+        style={{ position: 'absolute', left: -SHADOW, top: -SHADOW }}
+      >
+        {/* A soft offset copy underneath lifts the stamp off pale paper. */}
+        <Path d={outline} x={SHADOW} y={SHADOW + 1.5} fill="#000" fillOpacity={0.22} />
+        <Path d={outline} x={SHADOW} y={SHADOW} fill={PAPER} stroke="#000" strokeOpacity={0.12} strokeWidth={0.5} />
+      </Svg>
       <View
         style={{ position: 'absolute', top: margin, left: margin, right: margin, bottom: margin, overflow: 'hidden', backgroundColor: '#000' }}
       >
         {children}
       </View>
-      {edge(width).map((x) => (
-        <View key={`t${x}`} style={[dot, { left: x, top: -hole / 2 }]} />
-      ))}
-      {edge(width).map((x) => (
-        <View key={`b${x}`} style={[dot, { left: x, bottom: -hole / 2 }]} />
-      ))}
-      {edge(height).map((y) => (
-        <View key={`l${y}`} style={[dot, { top: y, left: -hole / 2 }]} />
-      ))}
-      {edge(height).map((y) => (
-        <View key={`r${y}`} style={[dot, { top: y, right: -hole / 2 }]} />
-      ))}
     </View>
   );
 }

@@ -90,7 +90,7 @@ export function StampSheet({
           >
             {/* This padded card is what gets shared, so the perforated edge is in the picture. */}
             <View ref={picture} collapsable={false} style={styles.picture}>
-              <Stamp width={230} holeColor={BACKGROUND}>
+              <Stamp width={230}>
                 <Image source={{ uri: stampUri(stamp) }} style={StyleSheet.absoluteFill} />
               </Stamp>
             </View>

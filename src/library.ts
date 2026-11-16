@@ -1,7 +1,23 @@
 // The whole saved state: logbooks and the stamps inside them. Everything here is pure
 // (no file access) so it can be tested with `npm run check`; src/store.ts does the saving.
 
-export type Logbook = { id: string; name: string; color: string };
+export type Logbook = {
+  id: string;
+  name: string;
+  color: string; // cloth cover
+  paper?: string; // inside pages; missing in logbooks saved before pages had a colour
+};
+
+/** Page colours to choose from. The first is the default. */
+export const PAPER_COLORS = ['#efe6d2', '#f7f4ec', '#d9d9d4', '#c9ac84', '#ecd9d0', '#d5dccb', '#2b2a28'];
+
+export function paperOf(book: Logbook): string {
+  return book.paper ?? PAPER_COLORS[0];
+}
+
+export function setPaper(lib: Library, id: string, paper: string): Library {
+  return { ...lib, logbooks: lib.logbooks.map((b) => (b.id === id ? { ...b, paper } : b)) };
+}
 
 export type StampRecord = {
   id: string;

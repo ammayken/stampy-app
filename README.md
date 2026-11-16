@@ -61,6 +61,9 @@ Xcode or development build is needed.
   a dark card, through the iOS share sheet) or move it to another logbook. The shared
   picture is a screen snapshot, so it is smaller than the stored 900 x 1200 photo.
 - Hold a cover on the shelf to change its colour.
+- Logbook pages are textured paper. The palette button in a logbook picks the paper colour
+  (seven choices, one of them dark), saved per logbook.
+- The perforated edge is a real cut-out shape (SVG), so the page shows through the holes.
 - Back camera only, portrait only.
 
 ## Checks
@@ -75,6 +78,8 @@ Runs the TypeScript type-check and small tests of the crop and page maths (`src/
 
 - `App.tsx` - camera screen, shutter, keep-or-retake step.
 - `src/Stamp.tsx` - the perforated stamp frame.
+- `src/perforation.ts` - the stamp outline shape and ink colour maths.
+- `assets/paper@2x.png` - see-through, tileable paper grain laid over the page colour.
 - `src/Shelf.tsx` - the shelf of cloth-cover logbooks.
 - `src/Logbook.tsx` - logbook pages.
 - `src/library.ts` - logbooks and stamps as data, and every change to them.
