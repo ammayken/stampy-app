@@ -2,8 +2,7 @@ import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import { STAMP_ASPECT } from './crop';
 
-export const BACKGROUND = '#141210';
-export const PAPER = '#f3ecdc';
+import { BACKGROUND, PAPER } from './theme';
 
 /** Outer paper height for a given outer paper width. */
 export function stampHeight(width: number) {

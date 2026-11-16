@@ -4,8 +4,9 @@ A phone-only camera app where the stamp is the viewfinder. So far it has:
 
 - a live camera preview inside a perforated stamp frame on a dark screen, with a round shutter;
 - a photo cropped to the one standard stamp size (3:4, 900 x 1200 px);
-- a keep-or-retake step with an optional place and note;
-- stamps saved on the phone with their date, shown in a logbook with 12-stamp pages.
+- a capture flash and haptic tap, then a keep-or-retake step with an optional place and note;
+- stamps saved on the phone with their date, shown in a logbook with 12-stamp pages;
+- a sheet for each saved stamp where its place and note can be edited.
 
 Built with Expo SDK 58, React Native and TypeScript. It runs in **Expo Go**, so no Mac,
 Xcode or development build is needed.
@@ -49,9 +50,9 @@ Xcode or development build is needed.
 - Each saved file is a plain rectangular JPEG. The perforated edge is drawn around it on
   screen, not baked into the file.
 - One logbook only, with no cloth cover yet. Swipe sideways between pages; tap a stamp to
-  see its date, place and note.
+  see its date and edit its place and note.
 - Place is typed by hand; there is no GPS lookup.
-- No deleting or editing stamps yet. Back camera only, portrait only.
+- No deleting stamps yet. Back camera only, portrait only.
 
 ## Checks
 
@@ -65,6 +66,8 @@ Runs the TypeScript type-check and small tests of the crop and page maths (`src/
 
 - `App.tsx` - camera screen, shutter, keep-or-retake step.
 - `src/Stamp.tsx` - the perforated stamp frame.
-- `src/Logbook.tsx` - logbook pages and the single-stamp view.
+- `src/Logbook.tsx` - logbook pages.
+- `src/StampSheet.tsx` - the sheet for one saved stamp.
+- `src/Fields.tsx`, `src/theme.ts` - place and note inputs, shared colours.
 - `src/store.ts` - saving and loading stamps on the phone.
-- `src/crop.ts`, `src/pages.ts` - stamp size, centre-crop and page-splitting maths.
+- `src/crop.ts`, `src/pages.ts` - stamp size, centre-crop, page-splitting and grid-fitting maths.

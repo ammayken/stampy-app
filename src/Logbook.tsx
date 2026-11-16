@@ -1,96 +1,141 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import { FlatList, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { pagesOf, STAMPS_PER_PAGE } from './pages';
-import { PAPER, Stamp, stampHeight } from './Stamp';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { fitStamp, pagesOf, STAMPS_PER_PAGE } from './pages';
+import { Stamp, stampHeight } from './Stamp';
+import { StampSheet } from './StampSheet';
 import { stampUri, type StampRecord } from './store';
+import { CLOTH, PAPER } from './theme';
 
-const CLOTH = '#26352e';
 const COLUMNS = 3;
 const ROWS = STAMPS_PER_PAGE / COLUMNS;
-const GAP = 14;
-const SIDE = 24;
-const CHROME = 210; // ponytail: fixed space for header and footer; use safe-area insets if it clips on some phone
+const GAP = 12;
+const ASPECT = stampHeight(1000) / 1000; // stamp paper height / width
 
-export function Logbook({ stamps, onClose }: { stamps: StampRecord[]; onClose: () => void }) {
-  const { width, height } = useWindowDimensions();
+export function Logbook({
+  stamps,
+  onCamera,
+  onEdit,
+}: {
+  stamps: StampRecord[];
+  onCamera: () => void;
+  onEdit: (stamp: StampRecord, place: string, note: string) => void;
+}) {
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<StampRecord | null>(null);
   const pages = pagesOf(stamps);
   const [page, setPage] = useState(pages.length - 1);
-
-  // Biggest stamp that fits 3 across and 4 down.
-  const byWidth = (width - SIDE * 2 - GAP * (COLUMNS - 1)) / COLUMNS;
-  const byHeight = ((height - CHROME - GAP * (ROWS - 1)) / ROWS / stampHeight(100)) * 100;
-  const stampWidth = Math.min(byWidth, byHeight);
-  const gridWidth = stampWidth * COLUMNS + GAP * (COLUMNS - 1);
-
-  if (selected) {
-    return (
-      <Pressable style={styles.screen} onPress={() => setSelected(null)} accessibilityLabel="Close stamp">
-        <Stamp width={Math.min(width - 72, 320)} holeColor={CLOTH}>
-          <Image source={{ uri: stampUri(selected) }} style={StyleSheet.absoluteFill} />
-        </Stamp>
-        <Text style={styles.title}>{new Date(selected.takenAt).toLocaleDateString()}</Text>
-        {selected.place ? <Text style={styles.text}>{selected.place}</Text> : null}
-        {selected.note ? <Text style={styles.text}>{selected.note}</Text> : null}
-        <Text style={styles.faint}>Tap anywhere to go back</Text>
-      </Pressable>
-    );
-  }
+  // Height actually left for the grid between header and footer, measured on screen.
+  const [gridHeight, setGridHeight] = useState(0);
+  const stampWidth = fitStamp(width - 40, gridHeight, COLUMNS, ROWS, GAP, ASPECT);
 
   return (
-    <View style={styles.screen}>
-      <Text style={styles.title}>Logbook</Text>
-      <View style={{ flexGrow: 0 }}>
-        <FlatList
-          data={pages}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={(_, i) => String(i)}
-          initialScrollIndex={pages.length - 1}
-          getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
-          onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
-          renderItem={({ item }) => (
-            <View style={{ width, alignItems: 'center' }}>
-              <View style={{ width: gridWidth, flexDirection: 'row', flexWrap: 'wrap', gap: GAP }}>
-                {Array.from({ length: STAMPS_PER_PAGE }, (_, i) => {
-                  const stamp = item[i];
-                  return stamp ? (
-                    <Pressable
-                      key={stamp.id}
-                      onPress={() => setSelected(stamp)}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Stamp from ${new Date(stamp.takenAt).toLocaleDateString()}`}
-                    >
-                      <Stamp width={stampWidth} holeColor={CLOTH}>
-                        <Image source={{ uri: stampUri(stamp) }} style={StyleSheet.absoluteFill} />
-                      </Stamp>
-                    </Pressable>
-                  ) : (
-                    <View key={i} style={[styles.slot, { width: stampWidth, height: stampHeight(stampWidth) }]} />
-                  );
-                })}
-              </View>
-            </View>
-          )}
-        />
+    <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom + 8 }]}>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>Logbook</Text>
+          <Text style={styles.subtitle}>
+            {stamps.length === 0 ? 'No stamps yet' : stamps.length === 1 ? '1 stamp' : `${stamps.length} stamps`}
+          </Text>
+        </View>
+        <Pressable
+          style={({ pressed }) => [styles.camera, pressed && styles.pressed]}
+          onPress={onCamera}
+          accessibilityRole="button"
+          accessibilityLabel="Take a new stamp"
+        >
+          <Ionicons name="camera" size={24} color={CLOTH} />
+        </Pressable>
       </View>
-      <Text style={styles.faint}>
-        Page {page + 1} of {pages.length}
-      </Text>
-      <Pressable style={styles.button} onPress={onClose} accessibilityRole="button">
-        <Text style={styles.buttonText}>Back to camera</Text>
-      </Pressable>
+
+      <View style={styles.grid} onLayout={(e) => setGridHeight(e.nativeEvent.layout.height)}>
+        {stampWidth > 0 ? (
+          <FlatList
+            data={pages}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(_, i) => String(i)}
+            initialScrollIndex={pages.length - 1}
+            getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+            onMomentumScrollEnd={(e) => setPage(Math.round(e.nativeEvent.contentOffset.x / width))}
+            renderItem={({ item }) => (
+              <View style={{ width, height: gridHeight, alignItems: 'center', justifyContent: 'center', gap: GAP }}>
+                {Array.from({ length: ROWS }, (_, row) => (
+                  <View key={row} style={{ flexDirection: 'row', gap: GAP }}>
+                    {Array.from({ length: COLUMNS }, (_, column) => {
+                      const stamp = item[row * COLUMNS + column];
+                      return stamp ? (
+                        <Pressable
+                          key={stamp.id}
+                          style={({ pressed }) => pressed && styles.pressed}
+                          onPress={() => setSelected(stamp)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Stamp from ${new Date(stamp.takenAt).toLocaleDateString()}`}
+                        >
+                          <Stamp width={stampWidth} holeColor={CLOTH}>
+                            <Image source={{ uri: stampUri(stamp) }} style={StyleSheet.absoluteFill} />
+                          </Stamp>
+                        </Pressable>
+                      ) : (
+                        <View key={column} style={[styles.slot, { width: stampWidth, height: stampWidth * ASPECT }]} />
+                      );
+                    })}
+                  </View>
+                ))}
+              </View>
+            )}
+          />
+        ) : null}
+      </View>
+
+      <View style={styles.dots} accessibilityLabel={`Page ${page + 1} of ${pages.length}`}>
+        {pages.length <= 10 ? (
+          pages.map((_, i) => <View key={i} style={[styles.dot, i === page && styles.dotOn]} />)
+        ) : (
+          <Text style={styles.subtitle}>
+            {page + 1} of {pages.length}
+          </Text>
+        )}
+      </View>
+
+      <StampSheet
+        stamp={selected}
+        onDone={(stamp, place, note) => {
+          setSelected(null);
+          if (place.trim() !== (stamp.place ?? '') || note.trim() !== (stamp.note ?? '')) onEdit(stamp, place, note);
+        }}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: CLOTH, alignItems: 'center', justifyContent: 'center', gap: 16 },
-  title: { color: PAPER, fontSize: 22, fontWeight: '600' },
-  text: { color: PAPER, fontSize: 16, textAlign: 'center', paddingHorizontal: 32 },
-  faint: { color: PAPER, opacity: 0.6, fontSize: 14 },
-  slot: { borderWidth: 1, borderStyle: 'dashed', borderColor: PAPER, opacity: 0.25 },
-  button: { paddingHorizontal: 22, paddingVertical: 12, borderRadius: 24, borderWidth: 1, borderColor: PAPER },
-  buttonText: { color: PAPER, fontSize: 16 },
+  screen: { flex: 1, backgroundColor: CLOTH },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 12,
+  },
+  title: { color: PAPER, fontSize: 34, fontWeight: '700' },
+  subtitle: { color: PAPER, opacity: 0.7, fontSize: 15 },
+  camera: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: PAPER,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: { opacity: 0.6 },
+  grid: { flex: 1 },
+  slot: { borderWidth: 1, borderStyle: 'dashed', borderColor: PAPER, borderRadius: 2, opacity: 0.25 },
+  dots: { height: 28, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: PAPER, opacity: 0.3 },
+  dotOn: { opacity: 1 },
 });

@@ -1,28 +1,32 @@
+import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { StatusBar } from 'expo-status-bar';
-import { useRef, useState } from 'react';
-import {
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { centerCrop, STAMP_ASPECT, STAMP_PX } from './src/crop';
+import { Fields } from './src/Fields';
 import { Logbook } from './src/Logbook';
-import { BACKGROUND, PAPER, Stamp } from './src/Stamp';
-import { keepStamp, loadStamps, type StampRecord } from './src/store';
+import { Stamp, stampHeight } from './src/Stamp';
+import { keepStamp, loadStamps, stampUri, updateStamp, type StampRecord } from './src/store';
+import { BACKGROUND, FIELD, LABEL, PAPER, SECONDARY } from './src/theme';
 
 function message(e: unknown) {
   return e instanceof Error ? e.message : String(e);
 }
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <StatusBar style="light" />
+      <Main />
+    </SafeAreaProvider>
+  );
+}
+
+function Main() {
   const [permission, requestPermission] = useCameraPermissions();
   const camera = useRef<CameraView>(null);
   const [ready, setReady] = useState(false);
@@ -32,15 +36,37 @@ export default function App() {
   const [draftUri, setDraftUri] = useState<string | null>(null);
   const [place, setPlace] = useState('');
   const [note, setNote] = useState('');
-  const [stamps, setStamps] = useState<StampRecord[] | null>(null);
+  const [stamps, setStamps] = useState<StampRecord[]>(() => {
+    try {
+      return loadStamps();
+    } catch {
+      return []; // keepStamp re-reads the index and reports the problem instead of overwriting it
+    }
+  });
   const [showLogbook, setShowLogbook] = useState(false);
-  const { width: screenWidth } = useWindowDimensions();
-  const stampWidth = Math.min(screenWidth - 72, 340);
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+
+  // White flash over the viewfinder on capture, and the new stamp "landing" on the review step.
+  const flash = useRef(new Animated.Value(0)).current;
+  const land = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (!draftUri) return;
+    land.setValue(0);
+    Animated.spring(land, { toValue: 1, friction: 6, tension: 120, useNativeDriver: true }).start();
+  }, [draftUri, land]);
+
+  // Biggest viewfinder stamp that leaves room for the hint and the bottom bar.
+  const roomForStamp = height - insets.top - insets.bottom - BAR_HEIGHT - 80;
+  const stampWidth = Math.min(width - 56, 360, (roomForStamp / stampHeight(1000)) * 1000);
 
   async function shoot() {
     if (!camera.current || !ready || busy) return;
     setBusy(true);
     setError(null);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    flash.setValue(1);
+    Animated.timing(flash, { toValue: 0, duration: 350, useNativeDriver: true }).start();
     try {
       const photo = await camera.current.takePictureAsync({ quality: 1 });
       const image = await ImageManipulator.manipulate(photo.uri)
@@ -58,6 +84,7 @@ export default function App() {
 
   function backToCamera() {
     setReady(false); // the camera view remounts and reports ready again
+    setError(null);
     setDraftUri(null);
     setPlace('');
     setNote('');
@@ -68,85 +95,94 @@ export default function App() {
     if (!draftUri) return;
     try {
       setStamps(keepStamp(draftUri, place, note));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       backToCamera();
-      setShowLogbook(true);
     } catch (e) {
       setError(message(e));
     }
   }
 
-  function openLogbook() {
-    try {
-      setStamps(loadStamps());
-      setShowLogbook(true);
-    } catch (e) {
-      setError(message(e));
-    }
-  }
-
-  if (showLogbook && stamps) {
+  if (showLogbook) {
     return (
-      <>
-        <StatusBar style="light" />
-        <Logbook stamps={stamps} onClose={backToCamera} />
-      </>
+      <Logbook
+        stamps={stamps}
+        onCamera={backToCamera}
+        onEdit={(stamp, newPlace, newNote) => {
+          try {
+            setStamps(updateStamp(stamp.id, newPlace, newNote));
+          } catch (e) {
+            setError(message(e));
+          }
+        }}
+      />
     );
   }
 
-  let body;
-  if (!permission) {
-    body = null; // still loading the permission state
-  } else if (!permission.granted) {
-    body = (
-      <>
+  if (!permission) return <View style={styles.screen} />; // still loading the permission state
+
+  if (!permission.granted) {
+    return (
+      <View style={[styles.screen, styles.centered]}>
+        <Ionicons name="camera-outline" size={48} color={PAPER} />
         <Text style={styles.hint}>Stampy needs the camera to make stamps.</Text>
-        <Pressable style={styles.button} onPress={requestPermission} accessibilityRole="button">
-          <Text style={styles.buttonText}>
+        <Pressable
+          style={({ pressed }) => [styles.button, styles.primary, pressed && styles.pressed]}
+          onPress={requestPermission}
+          accessibilityRole="button"
+        >
+          <Text style={styles.primaryText}>
             {permission.canAskAgain ? 'Allow camera' : 'Camera is blocked in Settings'}
           </Text>
         </Pressable>
-      </>
+      </View>
     );
-  } else if (draftUri) {
-    body = (
-      <>
-        <Stamp width={Math.min(stampWidth, 200)}>
-          <Image source={{ uri: draftUri }} style={StyleSheet.absoluteFill} />
-        </Stamp>
+  }
+
+  if (draftUri) {
+    return (
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={[styles.review, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+        automaticallyAdjustKeyboardInsets
+      >
+        <Animated.View
+          style={{
+            opacity: land,
+            transform: [{ scale: land.interpolate({ inputRange: [0, 1], outputRange: [1.35, 1] }) }],
+          }}
+        >
+          <Stamp width={Math.min(width - 150, 250)}>
+            <Image source={{ uri: draftUri }} style={StyleSheet.absoluteFill} />
+          </Stamp>
+        </Animated.View>
         {error ? <Text style={styles.hint}>{error}</Text> : null}
-        <TextInput
-          style={styles.input}
-          value={place}
-          onChangeText={setPlace}
-          placeholder="Place (optional)"
-          placeholderTextColor="#8a8272"
-          maxLength={60}
-          returnKeyType="done"
-          accessibilityLabel="Place"
-        />
-        <TextInput
-          style={styles.input}
-          value={note}
-          onChangeText={setNote}
-          placeholder="Note (optional)"
-          placeholderTextColor="#8a8272"
-          maxLength={140}
-          returnKeyType="done"
-          accessibilityLabel="Note"
-        />
+        <Fields place={place} note={note} onPlace={setPlace} onNote={setNote} />
         <View style={styles.row}>
-          <Pressable style={styles.button} onPress={backToCamera} accessibilityRole="button">
-            <Text style={styles.buttonText}>Retake</Text>
+          <Pressable
+            style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.pressed]}
+            onPress={backToCamera}
+            accessibilityRole="button"
+          >
+            <Text style={styles.secondaryText}>Retake</Text>
           </Pressable>
-          <Pressable style={[styles.button, styles.primary]} onPress={keep} accessibilityRole="button">
-            <Text style={[styles.buttonText, styles.primaryText]}>Keep stamp</Text>
+          <Pressable
+            style={({ pressed }) => [styles.button, styles.primary, pressed && styles.pressed]}
+            onPress={keep}
+            accessibilityRole="button"
+          >
+            <Text style={styles.primaryText}>Keep stamp</Text>
           </Pressable>
         </View>
-      </>
+      </ScrollView>
     );
-  } else {
-    body = (
-      <>
+  }
+
+  const latest = stamps[stamps.length - 1];
+  return (
+    <View style={[styles.screen, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View style={styles.viewfinder}>
         <Stamp width={stampWidth}>
           <CameraView
             ref={camera}
@@ -155,8 +191,28 @@ export default function App() {
             onCameraReady={() => setReady(true)}
             onMountError={(e) => setError(e.message)}
           />
+          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, { opacity: flash }]} />
         </Stamp>
         <Text style={styles.hint}>{error ?? 'Frame your shot inside the stamp.'}</Text>
+      </View>
+
+      <View style={styles.bar}>
+        <Pressable
+          style={({ pressed }) => [styles.side, pressed && styles.pressed]}
+          onPress={() => setShowLogbook(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Open logbook"
+        >
+          {latest ? (
+            <Image source={{ uri: stampUri(latest) }} style={styles.thumb} />
+          ) : (
+            <View style={[styles.thumb, styles.centered]}>
+              <Ionicons name="book-outline" size={22} color={PAPER} />
+            </View>
+          )}
+          <Text style={styles.sideLabel}>Logbook</Text>
+        </Pressable>
+
         <Pressable
           style={[styles.shutter, (!ready || busy) && styles.shutterOff]}
           onPress={shoot}
@@ -164,52 +220,58 @@ export default function App() {
           accessibilityRole="button"
           accessibilityLabel="Take stamp"
         >
-          <View style={styles.shutterCore} />
+          {({ pressed }) => <View style={[styles.shutterCore, pressed && styles.shutterPressed]} />}
         </Pressable>
-        <Pressable onPress={openLogbook} hitSlop={12} accessibilityRole="button">
-          <Text style={styles.link}>Logbook</Text>
-        </Pressable>
-      </>
-    );
-  }
 
-  return (
-    <KeyboardAvoidingView style={styles.flex} behavior="padding">
-      <Pressable style={styles.screen} onPress={Keyboard.dismiss} accessible={false}>
-        <StatusBar style="light" />
-        {body}
-      </Pressable>
-    </KeyboardAvoidingView>
+        <View style={styles.side} />
+      </View>
+    </View>
   );
 }
 
+const BAR_HEIGHT = 120;
+
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: BACKGROUND },
-  screen: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 22 },
-  hint: { color: '#d8cfbd', fontSize: 16, textAlign: 'center', paddingHorizontal: 24 },
-  link: { color: '#d8cfbd', fontSize: 16, textDecorationLine: 'underline' },
-  input: {
-    width: 280,
-    color: PAPER,
-    fontSize: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#8a8272',
-    paddingVertical: 8,
+  screen: { flex: 1, backgroundColor: BACKGROUND },
+  centered: { alignItems: 'center', justifyContent: 'center', gap: 20 },
+  viewfinder: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20 },
+  flash: { backgroundColor: '#fff' },
+  hint: { color: SECONDARY, fontSize: 15, textAlign: 'center', paddingHorizontal: 24 },
+  bar: {
+    height: BAR_HEIGHT,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 28,
   },
-  row: { flexDirection: 'row', gap: 14 },
+  side: { width: 72, alignItems: 'center', gap: 6 },
+  sideLabel: { color: LABEL, fontSize: 12 },
+  thumb: {
+    width: 42,
+    height: 56,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: PAPER,
+    backgroundColor: FIELD,
+  },
   shutter: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 78,
+    height: 78,
+    borderRadius: 39,
     borderWidth: 4,
     borderColor: PAPER,
     alignItems: 'center',
     justifyContent: 'center',
   },
   shutterOff: { opacity: 0.4 },
-  shutterCore: { width: 58, height: 58, borderRadius: 29, backgroundColor: PAPER },
-  button: { paddingHorizontal: 22, paddingVertical: 12, borderRadius: 24, borderWidth: 1, borderColor: PAPER },
+  shutterCore: { width: 62, height: 62, borderRadius: 31, backgroundColor: PAPER },
+  shutterPressed: { transform: [{ scale: 0.88 }] },
+  review: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: 28, paddingHorizontal: 20 },
+  row: { flexDirection: 'row', gap: 12, alignSelf: 'stretch' },
+  button: { flex: 1, height: 50, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
   primary: { backgroundColor: PAPER },
-  primaryText: { color: BACKGROUND },
-  buttonText: { color: PAPER, fontSize: 16 },
+  primaryText: { color: BACKGROUND, fontSize: 17, fontWeight: '600' },
+  secondary: { backgroundColor: FIELD },
+  secondaryText: { color: LABEL, fontSize: 17, fontWeight: '600' },
+  pressed: { opacity: 0.6 },
 });

@@ -42,3 +42,12 @@ export function keepStamp(tempUri: string, place: string, note: string): StampRe
   index.writeSync(JSON.stringify(all));
   return all;
 }
+
+/** Changes the place and note of a saved stamp. Returns all stamps. */
+export function updateStamp(id: string, place: string, note: string): StampRecord[] {
+  const all = loadStamps().map((s) =>
+    s.id === id ? { ...s, place: place.trim() || undefined, note: note.trim() || undefined } : s,
+  );
+  index.writeSync(JSON.stringify(all));
+  return all;
+}
